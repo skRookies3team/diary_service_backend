@@ -1,4 +1,4 @@
-package com.example.petlog.service;
+package com.example.petlog.service.lmpl;
 
 import com.example.petlog.dto.request.PetRequest;
 import com.example.petlog.dto.response.PetResponse;
@@ -9,6 +9,7 @@ import com.example.petlog.exception.BusinessException;
 import com.example.petlog.exception.ErrorCode;
 import com.example.petlog.repository.PetRepository;
 import com.example.petlog.repository.UserRepository;
+import com.example.petlog.service.PetService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
