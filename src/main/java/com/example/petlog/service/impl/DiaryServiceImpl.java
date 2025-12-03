@@ -5,7 +5,6 @@ import com.example.petlog.client.UserServiceClient;
 import com.example.petlog.dto.request.DiaryRequest;
 import com.example.petlog.dto.response.DiaryResponse;
 import com.example.petlog.entity.Diary;
-import com.example.petlog.entity.DiaryImage;
 import com.example.petlog.exception.EntityNotFoundException;
 import com.example.petlog.exception.ErrorCode;
 import com.example.petlog.repository.DiaryRepository;
@@ -26,37 +25,20 @@ public class DiaryServiceImpl implements DiaryService {
     @Override
     @Transactional
     public Long createDiary(DiaryRequest.Create request) {
-//        // 1. MSA 검증: User와 Pet이 실제 존재하는지 확인
-//        if (!userClient.checkUserExists(request.getUserId())) {
-//            throw new EntityNotFoundException(ErrorCode.USER_NOT_FOUND);
-//        }
-//        if (!petClient.checkPetExists(request.getPetId())) {
-//            throw new EntityNotFoundException(ErrorCode.PET_NOT_FOUND);
-//        }
-
-        // 2. 일기 엔티티 생성
-        Diary diary = Diary.builder()
-                .userId(request.getUserId())
-                .petId(request.getPetId())
-                .content(request.getContent())
-                .visibility(request.getVisibility())
-                .isAiGen(request.getIsAiGen())
-                .weather(request.getWeather())
-                .mood(request.getMood())
-                .build();
-
-        // 3. 이미지 리스트 처리
-        if (request.getImages() != null) {
-            // DiaryImageRequest -> DiaryRequest.Image
-            for (DiaryRequest.Image imgRequest : request.getImages()) {
-                diary.addImage(DiaryImage.builder()
-                        .imageUrl(imgRequest.getImageUrl())
-                        .imgOrder(imgRequest.getImgOrder())
-                        .mainImage(imgRequest.getMainImage())
-                        .build());
-            }
+        // 1. MSA 검증 (로컬 테스트 시 주석 처리 가능)
+        /*
+        if (!userClient.checkUserExists(request.getUserId())) {
+            throw new EntityNotFoundException(ErrorCode.USER_NOT_FOUND);
         }
+        if (!petClient.checkPetExists(request.getPetId())) {
+            throw new EntityNotFoundException(ErrorCode.PET_NOT_FOUND);
+        }
+        */
 
+        // 2. DTO -> Entity 변환 (DTO 내부 로직 사용)
+        Diary diary = request.toEntity();
+
+        // 3. 저장 (Cascade 설정으로 인해 Image도 자동 저장됨)
         return diaryRepository.save(diary).getDiaryId();
     }
 
@@ -65,8 +47,8 @@ public class DiaryServiceImpl implements DiaryService {
         Diary diary = diaryRepository.findById(diaryId)
                 .orElseThrow(() -> new EntityNotFoundException(ErrorCode.DIARY_NOT_FOUND));
 
-        // Entity -> DTO 변환 (DiaryResponse 내부의 from 메서드 활용)
-        return DiaryResponse.from(diary);
+        // Entity -> DTO 변환 (메서드명 변경: from -> fromEntity)
+        return DiaryResponse.fromEntity(diary);
     }
 
     @Override
@@ -82,8 +64,6 @@ public class DiaryServiceImpl implements DiaryService {
                 request.getWeather(),
                 request.getMood()
         );
-
-        // TODO: 이미지 수정 로직이 필요하다면 별도 메서드나 여기서 처리 추가
     }
 
     @Override
@@ -92,7 +72,6 @@ public class DiaryServiceImpl implements DiaryService {
         Diary diary = diaryRepository.findById(diaryId)
                 .orElseThrow(() -> new EntityNotFoundException(ErrorCode.DIARY_NOT_FOUND));
 
-        // Cascade.ALL 설정에 의해 연관된 DiaryImage들도 함께 삭제됨
         diaryRepository.delete(diary);
     }
 }

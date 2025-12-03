@@ -1,6 +1,8 @@
 package com.example.petlog.dto.request;
 
-import com.example.petlog.entity.Visibility;
+import com.example.petlog.entity.Diary;
+import com.example.petlog.entity.DiaryImage;
+import com.example.petlog.entity.Visibility; // Visibility Enum 위치 확인 필요
 import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -30,8 +32,30 @@ public class DiaryRequest {
         private String weather;
         private String mood;
 
-        // 이미지 리스트 (아래 정의된 Image 클래스 사용)
+        // 이미지 리스트
         private List<Image> images;
+
+        // DTO -> Entity 변환
+        public Diary toEntity() {
+            Diary diary = Diary.builder()
+                    .userId(this.userId)
+                    .petId(this.petId)
+                    .content(this.content)
+                    .visibility(this.visibility)
+                    .isAiGen(this.isAiGen)
+                    .weather(this.weather)
+                    .mood(this.mood)
+                    .build();
+
+            // 이미지 리스트가 있다면 변환하여 추가
+            if (this.images != null) {
+                this.images.stream()
+                        .map(Image::toEntity)
+                        .forEach(diary::addImage); // Diary 엔티티의 편의 메서드 사용
+            }
+
+            return diary;
+        }
     }
 
     // [Request] 일기 수정
@@ -40,13 +64,10 @@ public class DiaryRequest {
     @NoArgsConstructor
     @AllArgsConstructor
     public static class Update {
-
         private String content;
         private Visibility visibility;
         private String weather;
         private String mood;
-
-        // 수정 시 이미지는 별도 API로 관리하거나 필요 시 여기에 추가
     }
 
     // [Inner DTO] 이미지 요청용
@@ -55,9 +76,17 @@ public class DiaryRequest {
     @NoArgsConstructor
     @AllArgsConstructor
     public static class Image {
-
         private String imageUrl;
         private Integer imgOrder;
         private Boolean mainImage;
+
+        // DTO -> Entity 변환
+        public DiaryImage toEntity() {
+            return DiaryImage.builder()
+                    .imageUrl(this.imageUrl)
+                    .imgOrder(this.imgOrder)
+                    .mainImage(this.mainImage)
+                    .build();
+        }
     }
 }
