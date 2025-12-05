@@ -1,7 +1,9 @@
 package com.example.petlog.service.impl;
 
 import com.example.petlog.client.PetServiceClient;
+import com.example.petlog.client.StorageServiceClient;
 import com.example.petlog.client.UserServiceClient;
+import com.example.petlog.entity.ImageSource;
 import com.example.petlog.dto.request.DiaryRequest;
 import com.example.petlog.dto.response.DiaryResponse;
 import com.example.petlog.entity.Diary;
@@ -9,21 +11,30 @@ import com.example.petlog.entity.PhotoArchive;
 import com.example.petlog.exception.EntityNotFoundException;
 import com.example.petlog.exception.ErrorCode;
 import com.example.petlog.repository.DiaryRepository;
-import com.example.petlog.repository.PhotoArchiveRepository;
 import com.example.petlog.service.DiaryService;
+import com.example.petlog.service.PhotoArchiveService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class DiaryServiceImpl implements DiaryService {
 
     private final DiaryRepository diaryRepository;
-    private final PhotoArchiveRepository photoArchiveRepository;
+    private final PhotoArchiveService photoArchiveService;
+
+    // [수정] MockStorageServiceClient 이름을 가진 빈을 주입하도록 명시
+    // Mock이 로드되지 않는 환경에서는 Feign Client가 주입됩니다.
+    @Qualifier("mockStorageServiceClient")
+    private final StorageServiceClient storageServiceClient;
     private final UserServiceClient userClient;
     private final PetServiceClient petClient;
 
@@ -40,17 +51,36 @@ public class DiaryServiceImpl implements DiaryService {
         }
         */
 
-        // 2. DTO -> Entity 변환 (일기 및 일기용 이미지 생성)
+        // 2. DTO -> Entity 변환
         Diary diary = request.toEntity();
 
-        // 3. 일기 저장 (Cascade 설정으로 인해 DiaryImage 테이블에도 자동 저장됨)
+        // 3. 일기 저장
         Diary savedDiary = diaryRepository.save(diary);
 
-        // 4. [핵심 로직] 전체 사진 보관함(PhotoArchive) 별도 저장
-        // -> DTO 내부 메서드를 사용하여 변환 로직을 위임 (서비스 코드 간소화)
+        // 4. 사진 보관함 처리 로직
         List<PhotoArchive> archives = request.toPhotoArchiveEntities();
         if (!archives.isEmpty()) {
-            photoArchiveRepository.saveAll(archives);
+            // 4-1. 내 서비스의 PhotoArchive에는 무조건 저장
+            photoArchiveService.saveArchives(archives);
+
+            // 4-2. 외부 보관함 서비스로 전송할 사진 선별 (GALLERY 출처만)
+            List<StorageServiceClient.PhotoRequest> newPhotos = archives.stream()
+                    .filter(archive -> archive.getSource() == ImageSource.GALLERY)
+                    .map(archive -> new StorageServiceClient.PhotoRequest(
+                            archive.getUserId(),
+                            archive.getImageUrl()
+                    ))
+                    .collect(Collectors.toList());
+
+            // 4-3. 선별된 사진만 외부 서비스로 전송
+            if (!newPhotos.isEmpty()) {
+                try {
+                    storageServiceClient.savePhotos(newPhotos);
+                    log.info("외부 보관함 서비스에 새 사진 {}장 전송 완료", newPhotos.size());
+                } catch (Exception e) {
+                    log.warn("외부 보관함 서비스 전송 실패: {}", e.getMessage());
+                }
+            }
         }
 
         return savedDiary.getDiaryId();
@@ -85,9 +115,7 @@ public class DiaryServiceImpl implements DiaryService {
         Diary diary = diaryRepository.findById(diaryId)
                 .orElseThrow(() -> new EntityNotFoundException(ErrorCode.DIARY_NOT_FOUND));
 
-        // 1. 다이어리 삭제
-        // -> 연관된 DiaryImage(일기 속 사진)들은 CascadeType.ALL에 의해 함께 삭제
-        // -> 하지만 위(createDiary)에서 따로 저장한 PhotoArchive(보관함 사진)는 삭제되지 않고 안전하게 남음
+        // 다이어리 삭제 (PhotoArchive는 유지됨)
         diaryRepository.delete(diary);
     }
 }
