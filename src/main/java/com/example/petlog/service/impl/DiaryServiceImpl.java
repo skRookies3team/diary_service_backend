@@ -11,6 +11,7 @@ import com.example.petlog.entity.PhotoArchive;
 import com.example.petlog.exception.EntityNotFoundException;
 import com.example.petlog.exception.ErrorCode;
 import com.example.petlog.repository.DiaryRepository;
+import com.example.petlog.repository.PhotoArchiveRepository;
 import com.example.petlog.service.DiaryService;
 import com.example.petlog.service.PhotoArchiveService;
 import lombok.RequiredArgsConstructor;
@@ -30,6 +31,7 @@ public class DiaryServiceImpl implements DiaryService {
 
     private final DiaryRepository diaryRepository;
     private final PhotoArchiveService photoArchiveService;
+    private final PhotoArchiveRepository photoArchiveRepository;
 
     // [수정] MockStorageServiceClient 이름을 가진 빈을 주입하도록 명시
     // Mock이 로드되지 않는 환경에서는 Feign Client가 주입됩니다.
@@ -75,8 +77,13 @@ public class DiaryServiceImpl implements DiaryService {
             // 4-3. 선별된 사진만 외부 서비스로 전송
             if (!newPhotos.isEmpty()) {
                 try {
+                    // [수정] 전송될 URL 목록을 로그에 추가
+                    String sentUrls = newPhotos.stream()
+                            .map(StorageServiceClient.PhotoRequest::imageUrl)
+                            .collect(Collectors.joining(", "));
+
                     storageServiceClient.savePhotos(newPhotos);
-                    log.info("외부 보관함 서비스에 새 사진 {}장 전송 완료", newPhotos.size());
+                    log.info("외부 보관함 서비스에 새 사진 {}장 전송 완료. URL: [{}]", newPhotos.size(), sentUrls);
                 } catch (Exception e) {
                     log.warn("외부 보관함 서비스 전송 실패: {}", e.getMessage());
                 }
