@@ -24,6 +24,11 @@ public class PhotoArchive {
     @Column(nullable = false)
     private String imageUrl;
 
+    // [추가] 사진의 출처 (GALLERY: 외부 업로드, ARCHIVE: 내부 보관함 선택)
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private ImageSource source;
+
     @CreationTimestamp
     @Column(updatable = false)
     private LocalDateTime createdAt;
