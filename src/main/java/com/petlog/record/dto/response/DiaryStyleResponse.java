@@ -1,6 +1,6 @@
 package com.petlog.record.dto.response;
 
-import com.petlog.record.entity.DiaryStyle; // Entity 경로 수정 필요
+import com.petlog.record.entity.DiaryStyle;
 import lombok.Data;
 import lombok.Builder;
 import lombok.NoArgsConstructor;
@@ -26,7 +26,7 @@ public class DiaryStyleResponse {
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
-    // [추가] Entity -> DTO 변환
+    // Entity -> DTO 변환
     public static DiaryStyleResponse fromEntity(DiaryStyle style) {
         return DiaryStyleResponse.builder()
                 .id(style.getId())

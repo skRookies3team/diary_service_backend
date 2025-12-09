@@ -1,6 +1,6 @@
 package com.petlog.record.dto.request;
 
-import com.petlog.record.entity.DiaryStyle; // Entity 경로 수정 필요
+import com.petlog.record.entity.DiaryStyle;
 import lombok.Data;
 import lombok.Builder;
 import lombok.NoArgsConstructor;
@@ -20,7 +20,7 @@ public class DiaryStyleRequest {
     private String themeStyle;       // 'basic', 'romantic', 'modern'
     private Long petId;              // 스타일을 적용할 펫 ID (선택적)
 
-    // [추가] DTO -> Entity 변환
+    // DTO -> Entity 변환
     public DiaryStyle toEntity(Long userId) {
         return DiaryStyle.builder()
                 .userId(userId)

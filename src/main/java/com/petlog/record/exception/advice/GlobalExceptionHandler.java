@@ -106,7 +106,7 @@ public class GlobalExceptionHandler {
         ErrorResponse errorResponse = ErrorResponse.builder()
                 .success(false)
                 .error(ErrorResponse.ErrorDetail.builder()
-                        // [수정] BIZ_001이 아니라 상수 이름으로 접근해야 합니다.
+                        // [수정] BIZ_001이 아니라 상수 이름으로 접근해야 함
                         .code(ErrorCode.BUSINESS_RULE_VIOLATION.getCode()) // 비즈니스 에러 코드로 처리
                         .message(e.getMessage())
                         .detail(null)

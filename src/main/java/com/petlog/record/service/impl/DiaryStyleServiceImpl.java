@@ -99,7 +99,7 @@ public class DiaryStyleServiceImpl implements DiaryStyleService {
     }
 
     // [수정] READ-ONLY 트랜잭션 유지 (INSERT는 createDefaultStyle의 새 트랜잭션에 위임)
-    // orElseGet에서 createDefaultStyle(public + @Transactional)을 호출합니다.
+    // orElseGet에서 createDefaultStyle(public + @Transactional)을 호출
     @Override
     @Transactional(readOnly = true)
     public DiaryStyleResponse getUserStyle(Long userId, Long petId) {
