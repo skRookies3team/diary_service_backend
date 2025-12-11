@@ -56,6 +56,11 @@ springdoc:
   swagger-ui:
     path: "${SWAGGER_UI}"
 
+# OpenAI 설정 (전역 적용을 위해 구분선 위로 배치)
+openai:
+  api:
+    key: ${OPENAI_API_KEY}  # 시스템 환경 변수 'OPENAI_API_KEY' 값을 가져옴
+
 ---
 # local-test 프로필 설정 시작 (새로운 YAML 문서)
 spring:
