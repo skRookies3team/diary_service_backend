@@ -3,15 +3,16 @@ package com.petlog.record.service.impl;
 import com.petlog.record.client.PetServiceClient;
 import com.petlog.record.client.StorageServiceClient;
 import com.petlog.record.client.UserServiceClient;
-import com.petlog.record.entity.DiaryImage;
-import com.petlog.record.entity.ImageSource;
 import com.petlog.record.dto.request.DiaryRequest;
 import com.petlog.record.dto.response.DiaryResponse;
 import com.petlog.record.entity.Diary;
+import com.petlog.record.entity.DiaryImage;
+import com.petlog.record.entity.ImageSource;
 import com.petlog.record.exception.EntityNotFoundException;
 import com.petlog.record.exception.ErrorCode;
 import com.petlog.record.repository.DiaryRepository;
 import com.petlog.record.service.DiaryService;
+import feign.FeignException; // [추가] Feign 예외 처리
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -29,25 +30,38 @@ public class DiaryServiceImpl implements DiaryService {
 
     private final DiaryRepository diaryRepository;
 
-    // [수정] MockStorageServiceClient 이름을 가진 빈을 주입하도록 명시
-    // Mock이 로드되지 않는 환경에서는 Feign Client가 주입됩니다.
-    @Qualifier("mockStorageServiceClient")
-    private final StorageServiceClient storageServiceClient;
     private final UserServiceClient userClient;
     private final PetServiceClient petClient;
+
+    @Qualifier("mockStorageServiceClient")
+    private final StorageServiceClient storageServiceClient;
 
     @Override
     @Transactional
     public Long createDiary(DiaryRequest.Create request) {
-        // 1. MSA 검증 (로컬 테스트 시 주석 처리)
-        /*
-        if (!userClient.checkUserExists(request.getUserId())) {
+
+        // 1. [검증] MSA 회원 서비스 연동 (우회 방식 적용)
+        // 회원 서비스에 'exists' API가 없으므로, 'getInfo' API를 호출하여 예외 발생 여부로 존재성을 확인합니다.
+
+        // [1-1] 사용자 존재 여부 확인
+        try {
+            // 상세 정보를 조회해보고, 성공하면 유저가 존재하는 것으로 간주
+            userClient.getUserInfo(request.getUserId());
+            log.info("회원 서비스 연동 성공: 유저 확인됨 (userId: {})", request.getUserId()); // [로그 추가]
+        } catch (FeignException e) {
+            // 404(Not Found)나 500 등의 에러가 발생하면 유저가 없거나 조회 불가능한 상태로 판단
+            log.warn("User validation failed for userId: {}. Cause: {}", request.getUserId(), e.getMessage());
             throw new EntityNotFoundException(ErrorCode.USER_NOT_FOUND);
         }
-        if (!petClient.checkPetExists(request.getPetId())) {
+
+        // [1-2] 펫 존재 여부 확인
+        try {
+            petClient.getPetInfo(request.getPetId());
+            log.info("회원 서비스 연동 성공: 펫 확인됨 (petId: {})", request.getPetId()); // [로그 추가]
+        } catch (FeignException e) {
+            log.warn("Pet validation failed for petId: {}. Cause: {}", request.getPetId(), e.getMessage());
             throw new EntityNotFoundException(ErrorCode.PET_NOT_FOUND);
         }
-        */
 
         // 2. DTO -> Entity 변환
         Diary diary = request.toEntity();
@@ -56,30 +70,41 @@ public class DiaryServiceImpl implements DiaryService {
         Diary savedDiary = diaryRepository.save(diary);
 
         // 4. 사진 보관함 처리 로직
-        List<DiaryImage> images = diary.getImages();
-
-        if (!images.isEmpty()) {
-            // [핵심] 4-1. 외부 보관함 서비스로 전송할 사진 선별 (GALLERY 출처만)
-            List<StorageServiceClient.PhotoRequest> newPhotos = images.stream()
-                    .filter(img -> img.getSource() == ImageSource.GALLERY) // 갤러리에서 온 것만 필터링
-                    .map(img -> new StorageServiceClient.PhotoRequest(
-                            img.getUserId(),
-                            img.getImageUrl()
-                    ))
-                    .collect(Collectors.toList());
-
-            // 3-2. 선별된 사진만 외부 서비스로 전송
-            if (!newPhotos.isEmpty()) {
-                try {
-                    storageServiceClient.savePhotos(newPhotos);
-                    log.info("외부 보관함 서비스에 새 사진 {}장 전송 완료. URL: [{}]", newPhotos.size(), newPhotos.stream().map(StorageServiceClient.PhotoRequest::imageUrl).collect(Collectors.joining(", ")));
-                } catch (Exception e) {
-                    log.warn("외부 보관함 서비스 전송 실패: {}", e.getMessage());
-                }
-            }
-        }
+        processDiaryImages(diary);
 
         return savedDiary.getDiaryId();
+    }
+
+    /**
+     * 다이어리에 포함된 이미지 중 '갤러리'에서 가져온 사진을 선별하여
+     * 외부 스토리지 서비스(보관함)에 저장 요청을 보냅니다.
+     */
+    private void processDiaryImages(Diary diary) {
+        List<DiaryImage> images = diary.getImages();
+
+        if (images == null || images.isEmpty()) {
+            return;
+        }
+
+        // 4-1. 전송할 사진 선별 (GALLERY 출처만)
+        List<StorageServiceClient.PhotoRequest> newPhotos = images.stream()
+                .filter(img -> img.getSource() == ImageSource.GALLERY)
+                .map(img -> new StorageServiceClient.PhotoRequest(
+                        img.getUserId(),
+                        img.getImageUrl()
+                ))
+                .collect(Collectors.toList());
+
+        // 4-2. 외부 서비스 전송
+        if (!newPhotos.isEmpty()) {
+            try {
+                storageServiceClient.savePhotos(newPhotos);
+                log.info("Storage Service: Transferred {} photos for Diary ID {}", newPhotos.size(), diary.getDiaryId());
+            } catch (Exception e) {
+                // 핵심 비즈니스(일기 저장)가 아니므로, 보관함 전송 실패 시 로그만 남기고 진행
+                log.warn("Storage Service Transfer Failed: {}", e.getMessage());
+            }
+        }
     }
 
     @Override
@@ -96,7 +121,7 @@ public class DiaryServiceImpl implements DiaryService {
         Diary diary = diaryRepository.findById(diaryId)
                 .orElseThrow(() -> new EntityNotFoundException(ErrorCode.DIARY_NOT_FOUND));
 
-        // PATCH (부분 수정) 로직
+        // Dirty Checking을 이용한 업데이트
         diary.update(
                 request.getContent() != null ? request.getContent() : diary.getContent(),
                 request.getVisibility() != null ? request.getVisibility() : diary.getVisibility(),
@@ -111,7 +136,6 @@ public class DiaryServiceImpl implements DiaryService {
         Diary diary = diaryRepository.findById(diaryId)
                 .orElseThrow(() -> new EntityNotFoundException(ErrorCode.DIARY_NOT_FOUND));
 
-        // DiaryImage는 Cascade에 의해 함께 삭제됩니다.
         diaryRepository.delete(diary);
     }
 }

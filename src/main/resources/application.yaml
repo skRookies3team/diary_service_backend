@@ -41,7 +41,7 @@ server:
 # === 외부 서비스 URL 설정 (Default Profile) ===
 external:
   user-service:
-    url: ${USER_SERVICE_URL }
+    url: ${USER_SERVICE_URL}
   pet-service:
     url: ${PET_SERVICE_URL}
   notification-service:
@@ -61,7 +61,8 @@ springdoc:
 spring:
   config:
     activate:
-      on-profile: local-test
+      # on-profile: local-test
+      on-profile:
   cloud:
     openfeign:
       client:
